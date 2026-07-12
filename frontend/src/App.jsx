@@ -10,10 +10,13 @@ function App() {
   const [documents, setDocuments] = useState([])
   const [activeFile, setActiveFile] = useState("")
 
+  // LIVE RENDER BACKEND URL
+  const BACKEND_URL = "https://documind-backend-hzp4.onrender.com";
+
   // API se uploaded documents ki list fetch karne ka function
   const fetchDocuments = async () => {
     try {
-      const response = await fetch("http://localhost:8000/documents")
+      const response = await fetch(`${BACKEND_URL}/documents`)
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`)
       }
@@ -27,7 +30,7 @@ function App() {
     }
   }
 
-  // React 19 safe mount fetch (Timeout loop se bachata hai)
+  // React 19 safe mount fetch
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchDocuments()
@@ -51,7 +54,7 @@ function App() {
     formData.append("file", file)
 
     try {
-      const response = await fetch("http://localhost:8000/upload", {
+      const response = await fetch(`${BACKEND_URL}/upload`, {
         method: "POST",
         body: formData,
       })
@@ -62,7 +65,7 @@ function App() {
 
       const data = await response.json()
       setUploadMessage(data.message)
-      fetchDocuments() // Dropdown list ko refresh karein
+      fetchDocuments() 
 
     } catch (error) {
       console.error(error)
@@ -72,13 +75,13 @@ function App() {
     }
   }
 
-  // Dropdown change handler (History se file select karna)
+  // Dropdown change handler
   const handleDropdownChange = async (e) => {
     const selectedDoc = e.target.value
     if (!selectedDoc) return
 
     try {
-      const response = await fetch("http://localhost:8000/select-document", {
+      const response = await fetch(`${BACKEND_URL}/select-document`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -97,7 +100,7 @@ function App() {
     }
   }
 
-  // AI query handler (Sawal puchna)
+  // AI query handler
   const handleAsk = async () => {
     if (!question) {
       alert("Please enter a question.")
@@ -109,7 +112,7 @@ function App() {
     formData.append("question", question)
 
     try {
-      const response = await fetch("http://localhost:8000/chat", {
+      const response = await fetch(`${BACKEND_URL}/chat`, {
         method: "POST",
         body: formData,
       })

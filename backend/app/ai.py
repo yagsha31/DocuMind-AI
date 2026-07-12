@@ -2,7 +2,7 @@ import os
 from groq import Groq
 
 # Groq Client ko initialize karein
-client = Groq(api_key=os.environ.get("GROQ_API_KEY",""))
+client = Groq(api_key=os.environ.get("GROQ_API_KEY","git"))
 
 def analyze_document(pdf_text: str, question: str) -> str:
     try:
