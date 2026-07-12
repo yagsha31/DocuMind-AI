@@ -1,115 +1,128 @@
-from fastapi import FastAPI, Form, UploadFile, File, HTTPException
+import os
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import shutil
-import fitz
-from app.ai import analyze_document
-import os   
+import fitz  # PyMuPDF
+from groq import Groq
 
 app = FastAPI()
+
+# CORS configuration to allow your frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Production me aap ise specific frontend URL de sakti hain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Global variables
-pdf_text = None  
-current_active_file = None  # Naya: Kaunsi file abhi select hai usko track karne ke liye
+# Groq Client Initialization (Fixed Line)
+# Default "git" string hata diya hai taaki Render ki Environment Variable automatic pick ho sake
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-# Pydantic model dropdown selection ke liye
-class SelectDocRequest(BaseModel):
-    filename: str
-
-# Paths set up
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+# In-memory storage for simplicity
+UPLOAD_DIR = "./uploaded_files"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+db = {
+    "documents": [],
+    "active_file": None,
+    "extracted_text": ""
+}
+
+def analyze_document(pdf_text: str, question: str) -> str:
+    try:
+        # Rate limit aur heavy files se bachne ke liye safe text limit
+        truncated_text = pdf_text[:15000] 
+
+        prompt = f"""
+        You are a helpful AI assistant. Answer the user's question based ONLY on the provided document text. 
+        If the answer is not present in the text, politely state that it's not found in the document.
+        
+        Document Text:
+        {truncated_text}
+        
+        User Question: {question}
+        """
+
+        # Llama 3.3 Versatile model
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+        )
+        
+        return chat_completion.choices[0].message.content
+
+    except Exception as e:
+        return f"Error connecting to Groq AI: {str(e)}"
 
 @app.get("/")
-def home():
-    return {"message": "Welcome to DocuMind-AI!"}
-
+def read_root():
+    return {"message": "Welcome to DocuMind AI Backend!"}
 
 @app.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
-    global pdf_text, current_active_file
+async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+    
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+    
+    # Extract text from PDF
+    text = ""
+    try:
+        doc = fitz.open(file_path)
+        for page in doc:
+            text += page.get_text()
+        doc.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)}")
+    
+    # Update local state
+    if file.filename not in db["documents"]:
+        db["documents"].append(file.filename)
+    db["active_file"] = file.filename
+    db["extracted_text"] = text
 
-    pdf_path = os.path.join(UPLOAD_DIR, file.filename)
+    return {"message": f"File '{file.filename}' uploaded and processed successfully."}
 
-    # Save uploaded PDF
-    with open(pdf_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # Open the PDF and extract text
-    doc = fitz.open(pdf_path)
-    full_text = ""
-
-    for page_num in range(len(doc)):
-        page = doc.load_page(page_num)
-        full_text += page.get_text() + "\n"
-
-    # Store globally
-    pdf_text = full_text
-    current_active_file = file.filename # Upload hote hi isko active set kar diya
-    page_count = len(doc)
-    doc.close()
-
+@app.get("/documents")
+def get_documents():
     return {
-        "message": "PDF uploaded successfully",
-        "filename": file.filename,
-        "pages": page_count
+        "documents": db["documents"],
+        "active_file": db["active_file"]
     }
 
-
-# 1. NAYA ENDPOINT: Saari uploaded PDFs ki list frontend ko bhejne ke liye
-@app.get("/documents")
-async def get_documents():
-    if not os.path.exists(UPLOAD_DIR):
-        return {"documents": [], "active_file": current_active_file}
-    
-    # Sirf .pdf files ki list nikalenge
-    files = [f for f in os.listdir(UPLOAD_DIR) if f.endswith('.pdf')]
-    return {"documents": files, "active_file": current_active_file}
-
-
-# 2. NAYA ENDPOINT: Jab user dropdown se koi purani file select karega
 @app.post("/select-document")
-async def select_document(req: SelectDocRequest):
-    global pdf_text, current_active_file
+def select_document(payload: dict):
+    filename = payload.get("filename")
+    if filename not in db["documents"]:
+        raise HTTPException(status_code=404, detail="Document not found in history.")
     
-    pdf_path = os.path.join(UPLOAD_DIR, req.filename)
-    
-    if not os.path.exists(pdf_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    # Purani file ko select karke uska text fir se extract kar lenge memory me
-    doc = fitz.open(pdf_path)
-    full_text = ""
-    for page_num in range(len(doc)):
-        page = doc.load_page(page_num)
-        full_text += page.get_text() + "\n"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    text = ""
+    try:
+        doc = fitz.open(file_path)
+        for page in doc:
+            text += page.get_text()
+        doc.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
         
-    pdf_text = full_text
-    current_active_file = req.filename
-    doc.close()
-    
-    return {"message": f"Active document changed to {req.filename}"}
-
+    db["active_file"] = filename
+    db["extracted_text"] = text
+    return {"message": f"Active document changed to '{filename}'"}
 
 @app.post("/chat")
-async def chat(question: str = Form(...)):
-    global pdf_text
-
-    if pdf_text is None:
-        return {"error": "Please upload or select a PDF first."}
-
-    answer = analyze_document(pdf_text, question)
-
-    return {
-        "question": question,
-        "answer": answer
-    }
+def chat(question: str = Form(...)):
+    if not db["active_file"] or not db["extracted_text"]:
+        raise HTTPException(status_code=400, detail="No active document found. Please upload a PDF first.")
+    
+    answer = analyze_document(db["extracted_text"], question)
+    return {"answer": answer}
