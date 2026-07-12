@@ -1,12 +1,11 @@
 import os
 from groq import Groq
 
-# Groq Client ko initialize karein
-client = Groq(api_key=os.environ.get("GROQ_API_KEY","git"))
+# Default me "git" hata kar sirf environment variable check karein
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 def analyze_document(pdf_text: str, question: str) -> str:
     try:
-        # Rate limit aur heavy files se bachne ke liye safe text limit
         truncated_text = pdf_text[:15000] 
 
         prompt = f"""
@@ -19,7 +18,6 @@ def analyze_document(pdf_text: str, question: str) -> str:
         User Question: {question}
         """
 
-        # Llama 3.3 Versatile sabse stable aur powerful model hai
         chat_completion = client.chat.completions.create(
             messages=[
                 {
@@ -27,7 +25,7 @@ def analyze_document(pdf_text: str, question: str) -> str:
                     "content": prompt,
                 }
             ],
-            model="llama-3.3-70b-versatile",  # <-- Ekdam sahi aur stable model name
+            model="llama-3.3-70b-versatile",  
             temperature=0.3,
         )
         
