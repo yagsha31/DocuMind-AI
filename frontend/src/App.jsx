@@ -11,7 +11,7 @@ function App() {
   const [activeFile, setActiveFile] = useState("")
 
   // LIVE RENDER BACKEND URL
-  const BACKEND_URL = "https://documind-backend-hzp4.onrender.com";
+  const BACKEND_URL ="http://localhost:8000"  // Replace with your backend URL if different;
 
   // API se uploaded documents ki list fetch karne ka function
   const fetchDocuments = async () => {
