@@ -1,37 +1,48 @@
 import os
+import traceback
 from groq import Groq
 
-# Groq Client ko initialize karein
-client = Groq(api_key=os.environ.get("GROQ_API_KEY","git"))
-
 def analyze_document(pdf_text: str, question: str) -> str:
+    api_key = os.getenv("GROQ_API_KEY")
+
+    if not api_key:
+        return "Error: GROQ_API_KEY not found."
+
     try:
-        # Rate limit aur heavy files se bachne ke liye safe text limit
-        truncated_text = pdf_text[:15000] 
+        client = Groq(
+            api_key=api_key,
+            timeout=60
+        )
 
         prompt = f"""
-        You are a helpful AI assistant. Answer the user's question based ONLY on the provided document text. 
-        If the answer is not present in the text, politely state that it's not found in the document.
-        
-        Document Text:
-        {truncated_text}
-        
-        User Question: {question}
-        """
+You are a helpful AI assistant.
 
-        # Llama 3.3 Versatile sabse stable aur powerful model hai
-        chat_completion = client.chat.completions.create(
+Answer ONLY from the uploaded document.
+
+If the answer is not available in the document, reply:
+'I could not find this information in the uploaded document.'
+
+Document:
+{pdf_text[:15000]}
+
+Question:
+{question}
+"""
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "user",
-                    "content": prompt,
+                    "content": prompt
                 }
             ],
-            model="llama-3.3-70b-versatile",  # <-- Ekdam sahi aur stable model name
             temperature=0.3,
+            max_tokens=500
         )
-        
-        return chat_completion.choices[0].message.content
+
+        return response.choices[0].message.content
 
     except Exception as e:
-        return f"Error connecting to Groq AI: {str(e)}"
+        traceback.print_exc()
+        return f"Groq Error: {str(e)}"
