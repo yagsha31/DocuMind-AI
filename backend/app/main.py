@@ -12,7 +12,10 @@ app = FastAPI(title="DocuMind AI Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # Production me frontend URL lagana
+    allow_origins=[
+        "https://YOUR-FRONTEND-URL.onrender.com",
+        "http://localhost:5173"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -152,16 +155,16 @@ def chat(question: str = Form(...)):
         "answer": answer
     }
 
-# ---------------- Test Groq ---------------- #
-
 @app.get("/test-groq")
 def test_groq():
-
-    answer = analyze_document(
-        "India is the seventh largest country in the world.",
-        "Which country is mentioned?"
-    )
-
     return {
-        "answer": answer
+        "answer": analyze_document(
+            "India is the seventh largest country in the world.",
+            "Which country is mentioned?"
+        )
     }
+
+# ---------------- Test Groq ---------------- #
+
+
+    

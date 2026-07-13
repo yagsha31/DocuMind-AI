@@ -1,26 +1,19 @@
-import os
-import traceback
-from groq import Groq
+import requests
 
-def analyze_document(pdf_text: str, question: str) -> str:
-    api_key = os.getenv("GROQ_API_KEY")
+OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 
-    if not api_key:
-        return "Error: GROQ_API_KEY not found."
+MODEL = "qwen2.5:3b"
 
-    try:
-        client = Groq(
-            api_key=api_key,
-            timeout=60
-        )
 
-        prompt = f"""
+def analyze_document(pdf_text: str, question: str):
+
+    prompt = f"""
 You are a helpful AI assistant.
 
 Answer ONLY from the uploaded document.
 
-If the answer is not available in the document, reply:
-'I could not find this information in the uploaded document.'
+If the answer is not found, say:
+"I could not find this information in the uploaded document."
 
 Document:
 {pdf_text[:15000]}
@@ -29,20 +22,22 @@ Question:
 {question}
 """
 
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.3,
-            max_tokens=500
+    try:
+
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL,
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=120
         )
 
-        return response.choices[0].message.content
+        response.raise_for_status()
+
+        return response.json()["response"]
 
     except Exception as e:
-        traceback.print_exc()
-        return f"Groq Error: {str(e)}"
+
+        return f"Ollama Error: {str(e)}"
